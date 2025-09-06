@@ -15,16 +15,20 @@ def get_open_ends(df):
         start_idx = cols.index('TESTJUMP') + 1
     elif 'TESTLANG' in cols:
         start_idx = cols.index('TESTLANG') + 1
-    elif 'outro' in cols:
-        start_idx = cols.index('outro') + 1
+    elif 'ReDemHasRun' in cols:
+        start_idx = cols.index('ReDemHasRun') + 1
     else:
         return []
     open_end_cols = []
+    ignore_set = {"yes", "no", "dontknow"}
     for col in cols[start_idx:]:
         col_lower = col.lower()
         values = df[col].dropna().astype(str)
-        values = [v for v in values if v.strip() != '']
+        values = [v.strip() for v in values if v.strip() != '']
         if not values:
+            continue
+        # If all values are exactly Yes, No, or Dontknow (case-insensitive), skip this column
+        if all(v.lower() in ignore_set for v in values):
             continue
         if '.oth' in col_lower or '._oth' in col_lower:
             open_end_cols.append(col)
@@ -46,12 +50,12 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     # Step 1: Load Excel file
     try:
         if status_callback:
-            status_callback('Loading Excel file...')
+            status_callback('Step 1 of 5: Loading your Excel file...')
         df = pd.read_excel(input_file, dtype=str)
     except Exception as e:
         log_error(f'Error reading Excel file: {e}', error_log_path)
         if status_callback:
-            status_callback('Error reading Excel file.')
+            status_callback('Error: Could not read the Excel file. Please check the file and try again.')
         return False
 
     # Step 2: Handle include.txt and open ends
@@ -61,7 +65,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         include_with_opens_path = os.path.join(output_dir, 'Include_withOpens.txt')
         if check_open_ends:
             if status_callback:
-                status_callback('Scanning for open ends...')
+                status_callback('Step 2 of 5: Scanning for open-ended questions in your data...')
             open_end_cols = get_open_ends(df)
             try:
                 with open(include_file, 'r', encoding='utf-8') as f:
@@ -70,7 +74,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             except Exception as e:
                 log_error(f'Error reading include.txt: {e}', error_log_path)
                 if status_callback:
-                    status_callback('Error reading include.txt.')
+                    status_callback('Error: Could not read the include.txt file. Please check the file and try again.')
                 return False
             selected_columns = original_include_columns + open_end_cols
             # Deduplicate while preserving order
@@ -87,7 +91,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             except Exception as e:
                 log_error(f'Error writing Include_withOpens.txt: {e}', error_log_path)
                 if status_callback:
-                    status_callback('Error writing Include_withOpens.txt.')
+                    status_callback('Error: Could not write Include_withOpens.txt in the output folder.')
                 return False
             selected_columns = deduped_columns
         else:
@@ -98,19 +102,19 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             except Exception as e:
                 log_error(f'Error reading include.txt: {e}', error_log_path)
                 if status_callback:
-                    status_callback('Error reading include.txt.')
+                    status_callback('Error: Could not read the include.txt file. Please check the file and try again.')
                 return False
             selected_columns = original_include_columns
     except Exception as e:
         log_error(f'Unexpected error handling include.txt: {e}', error_log_path)
         if status_callback:
-            status_callback('Unexpected error handling include.txt.')
+            status_callback('Error: Unexpected error handling include.txt.')
         return False
 
     # Step 3: Filter columns
     try:
         if status_callback:
-            status_callback('Filtering columns and preparing for output...')
+            status_callback('Step 3 of 5: Filtering columns and preparing output...')
         all_columns = list(df.columns)
         selected_columns = [col for col in selected_columns if col in all_columns]
         if not selected_columns:
@@ -120,25 +124,25 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     except Exception as e:
         log_error(f'Error processing selected columns: {e}', error_log_path)
         if status_callback:
-            status_callback('Error processing selected columns.')
+            status_callback('Error: Problem processing selected columns.')
         return False
 
     # Step 4: Check output directory
     try:
         if not os.path.isdir(output_dir):
             if status_callback:
-                status_callback(f'Output directory does not exist: {output_dir}')
+                status_callback(f'Error: Output directory does not exist: {output_dir}')
             return False
     except Exception as e:
         log_error(f'Error during output directory prompt: {e}', error_log_path)
         if status_callback:
-            status_callback('Error during output directory prompt.')
+            status_callback('Error: Problem with output directory.')
         return False
 
     # Step 5: Find unique InterviewLanguage values
     try:
         if status_callback:
-            status_callback('Scanning for unique InterviewLanguage values...')
+            status_callback('Step 4 of 5: Scanning for unique InterviewLanguage values...')
         if 'InterviewLanguage' not in df.columns:
             if status_callback:
                 status_callback('InterviewLanguage column not found.')
@@ -147,13 +151,13 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     except Exception as e:
         log_error(f'Error finding InterviewLanguage values: {e}', error_log_path)
         if status_callback:
-            status_callback('Error finding InterviewLanguage values.')
+            status_callback('Error: Could not find InterviewLanguage values.')
         return False
 
     # Step 6: Create output files and enhanced log
     try:
         if status_callback:
-            status_callback('Creating output files...')
+            status_callback('Step 5 of 5: Creating output files...')
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         logfile_path = os.path.join(output_dir, f'{base_name}_log.txt')
         output_files = []
@@ -209,7 +213,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             for line in log_lines:
                 logf.write(line + '\n')
         if status_callback:
-            status_callback('Done! Files created:')
+            status_callback('Done! Files created.',)
             status_callback(f'- Overall file: {overall_file}')
             for lang in languages:
                 out_file = os.path.join(output_dir, f'{base_name}__{lang}.xlsx')
