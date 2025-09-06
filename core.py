@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+from pathlib import Path
 import sys
 import traceback
 from tqdm import tqdm
@@ -62,15 +63,15 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     try:
         open_end_cols = []
         original_include_columns = []
-        include_with_opens_path = os.path.join(output_dir, 'Include_withOpens.txt')
+        output_dir = Path(output_dir)
+        include_with_opens_path = output_dir / 'Include_withOpens.txt'
         if check_open_ends:
             if status_callback:
                 status_callback('Step 2 of 5: Scanning for open-ended questions in your data...')
             open_end_cols = get_open_ends(df)
             try:
                 with open(include_file, 'r', encoding='utf-8') as f:
-                    line = f.readline().strip()
-                    original_include_columns = [col.strip() for col in line.split(';') if col.strip()]
+                    original_include_columns = [line.strip() for line in f if line.strip()]
             except Exception as e:
                 log_error(f'Error reading include.txt: {e}', error_log_path)
                 if status_callback:
@@ -87,7 +88,8 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             # Save the new include file with open ends in the output directory
             try:
                 with open(include_with_opens_path, 'w', encoding='utf-8') as f:
-                    f.write(';'.join(deduped_columns) + ';\n')
+                    for col in deduped_columns:
+                        f.write(col + '\n')
             except Exception as e:
                 log_error(f'Error writing Include_withOpens.txt: {e}', error_log_path)
                 if status_callback:
@@ -97,8 +99,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         else:
             try:
                 with open(include_file, 'r', encoding='utf-8') as f:
-                    line = f.readline().strip()
-                    original_include_columns = [col.strip() for col in line.split(';') if col.strip()]
+                    original_include_columns = [line.strip() for line in f if line.strip()]
             except Exception as e:
                 log_error(f'Error reading include.txt: {e}', error_log_path)
                 if status_callback:

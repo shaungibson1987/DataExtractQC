@@ -7,7 +7,7 @@ DataExtractQC is a simple tool that helps you extract and organize survey data f
 
 ## What does it do?
 - Reads your survey data from an Excel (.xlsx) file.
-- Lets you choose which columns (questions) to keep, using an "include.txt" file.
+- Lets you choose which columns (questions) to keep, using an "include.txt" file (one column name per line, no semicolons).
 - Automatically finds and adds open-ended questions (like text responses) if you want.
 - Splits your data into separate files by language, plus an overall file.
 - Saves all results in a folder you choose.
@@ -19,7 +19,7 @@ DataExtractQC is a simple tool that helps you extract and organize survey data f
 
 2. **Select your files and folder**
    - Click "Browse" next to **Data File (.xlsx)** and pick your Excel survey file.
-   - Click "Browse" next to **Include.txt file** and pick your include file (a text file listing the columns you want).
+   - Click "Browse" next to **Include.txt file** and pick your include file (a text file listing the columns you want, one column name per line).
    - Click "Browse" next to **Output folder** and pick where you want the results saved.
 
 3. **(Optional) Automatically find open ends**
@@ -39,7 +39,7 @@ DataExtractQC is a simple tool that helps you extract and organize survey data f
 
 ## Tips
 - If you see an error, check the error_log.txt file in your data folder for details.
-- You can use the same include.txt file for different surveys, just update the column names as needed.
+- You can use the same include.txt file for different surveys, just update the column names as needed. Each column name should be on its own line (no semicolons).
 - The program will never overwrite your original include.txt file.
 
 ## Need help?

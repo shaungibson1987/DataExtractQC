@@ -24,8 +24,9 @@ def print_open_ends(file_path, incentive_col):
         # Check if any value does NOT start with a digit or '_'
         if any(not (v.startswith('_') or v[0].isdigit()) for v in values):
             open_end_cols.append(col)
-    # Print in include.txt format
-    print(';'.join(open_end_cols) + ';')
+    # Print in include.txt format (one column per line, no semicolons)
+    for col in open_end_cols:
+        print(col)
 
 # Example usage:
 print_open_ends(r'C:\Yonder\Box\Yonder Data Solutions\DataExtractQC\P026776\P026776.xlsx', 'TESTJUMP')

@@ -8,6 +8,7 @@ A user-friendly tool for extracting and processing survey data from Excel files,
 - Customizable include file handling
 - Detailed logging and error reporting
 - Output split by language and overall
+- Customizable include file handling (one column per line, no semicolons)
 
 ## Requirements
 - Python 3.8+
