@@ -1,0 +1,1 @@
+Respondent.Serial;Resp_id;DataCollection.StartTime;DataCollection.FinishTime;Country;sample_source;InterviewLanguage;QCQualityTxtSub;QCQualityOE;QCDayBlock.QCDayOE;QCChoiceOE;outro;REQCQ1;REQCQ2;ReDemScores.REQCQ1_answerCategories;ReDemScores.REQCQ1_OES;ReDemScores.REQCQ2_answerCategories;ReDemScores.REQCQ2_OES
