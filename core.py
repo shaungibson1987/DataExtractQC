@@ -9,7 +9,7 @@ from error_logging import log_error
 from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFIX, OVERALL_SUFFIX, LANGUAGE_SUFFIX_TEMPLATE, IGNORE_SET, STATUS_MESSAGES
 from debug_logging import debug
 
-def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, error_log_path=None, status_callback=None):
+def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None):
     import time
     from datetime import datetime
 
@@ -143,29 +143,42 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         char_counts[overall_file] = df[selected_columns].astype(str).apply(lambda col: col.map(len)).sum().sum()
         outro_char_counts[overall_file] = df['outro'].astype(str).apply(len).sum() if 'outro' in df.columns else 0
 
-        # --- AI/BOT/CHATBOT word search post-processing ---
+        # --- Word search post-processing ---
         word_search_serials = None
         if check_ai_bot_search:
             import re
-            search_words = ["AI", "CHATBOT", "BOT"]
-            debug(f"[AI/BOT Search] Search words: {search_words}")
+            # Read search words from file
+            search_words = []
+            if word_file:
+                try:
+                    with open(word_file, 'r', encoding='utf-8') as wf:
+                        search_words = [line.strip() for line in wf if line.strip()]
+                except Exception as e:
+                    debug(f"[Word Search] Error reading word file: {e}")
+            if not search_words:
+                search_words = ["AI", "CHATBOT", "BOT"]  # fallback
+            debug(f"[Word Search] Search words: {search_words}")
             try:
                 df_overall = pd.read_excel(overall_file, dtype=str)
                 # Log first 5 outro values
                 if 'outro' in df_overall.columns:
                     outro_vals = df_overall['outro'].dropna().astype(str).head(5).tolist()
-                    debug(f"[AI/BOT Search] First 5 outro values: {outro_vals}")
+                    debug(f"[Word Search] First 5 outro values: {outro_vals}")
                 else:
-                    debug("[AI/BOT Search] No 'outro' column found in overall file.")
+                    debug("[Word Search] No 'outro' column found in overall file.")
                 matches = []
                 flagged_serials = set()
                 search_words_lower = [w.lower() for w in search_words]
                 for idx, row in df_overall.iterrows():
+                    interview_lang = str(row.get('InterviewLanguage', '')).strip().upper()
                     for col in df_overall.columns:
                         cell = str(row[col]) if not pd.isna(row[col]) else ""
                         # Tokenize using Unicode word characters
                         tokens = re.findall(r'\w+', cell, flags=re.UNICODE)
                         tokens_lower = [t.lower() for t in tokens]
+                        # Remove 'ai' from tokens_lower for Italian rows
+                        if interview_lang in ("ITA", "ITALIAN"):
+                            tokens_lower = [t for t in tokens_lower if t != "ai"]
                         for word in search_words_lower:
                             if word in tokens_lower:
                                 respondent_serial = row.get('serial', idx)
@@ -174,13 +187,13 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                                 break  # Only log once per cell
                 word_search_serials = sorted(flagged_serials, key=lambda x: str(x))
                 if matches:
-                    debug(f"[AI/BOT Search] Matches found:")
+                    debug(f"[Word Search] Matches found:")
                     for respondent_serial, col, cell in matches:
                         debug(f"  Respondent: {respondent_serial}, Column: {col}, Value: {cell}")
                 else:
-                    debug("[AI/BOT Search] No matches found.")
+                    debug("[Word Search] No matches found.")
             except Exception as e:
-                debug(f"[AI/BOT Search] Error during search: {e}")
+                debug(f"[Word Search] Error during search: {e}")
         # Per-language files
         for lang in languages:
             lang_df = df[df['InterviewLanguage'] == lang][selected_columns]
@@ -225,9 +238,16 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         log_lines.append("")
         log_lines.append("Word Search Results:")
         if check_ai_bot_search:
+            log_lines.append(f"Words searched for: {', '.join(search_words)}")
             if word_search_serials and len(word_search_serials) > 0:
+                # For each flagged respondent, find the first match and print serial - cell text
+                serial_to_cell = {}
+                for respondent_serial, col, cell in matches:
+                    if respondent_serial not in serial_to_cell:
+                        serial_to_cell[respondent_serial] = cell
                 for serial in word_search_serials:
-                    log_lines.append(str(serial))
+                    cell_text = serial_to_cell.get(serial, "")
+                    log_lines.append(f"{serial} - {cell_text}")
             else:
                 log_lines.append("No respondents flagged by word search.")
         else:

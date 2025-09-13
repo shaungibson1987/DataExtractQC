@@ -50,6 +50,7 @@ def main():
 	open_ends_var = tk.BooleanVar()
 	ai_bot_search_var = tk.BooleanVar()
 	status_var = tk.StringVar()
+	word_file_var = tk.StringVar()
 
 	# --- File/folder selection functions ---
 	def select_excel():
@@ -152,6 +153,7 @@ def main():
 	btn_browse_output.pack(side="left", padx=(8, 0))
 	ToolTip(output_entry, "Choose the folder where output files will be saved.")
 
+
 	# Options Section
 	options_frame = tb.Frame(content_frame)
 	options_frame.pack(pady=(0, 10), padx=20, fill="x")
@@ -163,15 +165,45 @@ def main():
 		variable=open_ends_var,
 		bootstyle="success-round-toggle"
 	)
-	cb_open_ends.pack(anchor="w", pady=(0, 6))  # Add bottom padding
+	cb_open_ends.pack(anchor="w", pady=(0, 16))  # Increased bottom padding
+
+	# Frame for word search toggle and word file input
+	word_search_frame = tb.Frame(options_frame)
+	word_search_frame.pack(anchor="w", fill="x")
 
 	cb_ai_bot_search = tb.Checkbutton(
-		options_frame,
+		word_search_frame,
 		text=LABEL_AI_BOT_SEARCH,
 		variable=ai_bot_search_var,
 		bootstyle="success-round-toggle"
 	)
-	cb_ai_bot_search.pack(anchor="w")  # No extra padding needed here
+	cb_ai_bot_search.pack(anchor="w", pady=(0, 8))  # Add bottom padding for word file input
+
+	# Frame for word file input (initially hidden)
+	word_file_row = tb.Frame(word_search_frame)
+	word_file_entry = tb.Entry(word_file_row, textvariable=word_file_var, width=30)
+	btn_browse_word_file = tb.Button(word_file_row, text=LABEL_BROWSE, bootstyle=PRIMARY, command=lambda: select_word_file())
+	word_file_entry.pack(side="left", fill="x", expand=True)
+	btn_browse_word_file.pack(side="left", padx=(8, 0))
+	ToolTip(word_file_entry, "Select a .txt file with search words (one per line).")
+
+	def select_word_file():
+		file_path = filedialog.askopenfilename(
+			filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+			title="Select word search .txt file"
+		)
+		if file_path:
+			word_file_var.set(file_path)
+
+	def toggle_word_file_row(*args):
+		if ai_bot_search_var.get():
+			word_file_row.pack(anchor="w", pady=(4, 0), fill="x")
+		else:
+			word_file_row.pack_forget()
+
+	ai_bot_search_var.trace_add('write', toggle_word_file_row)
+	# Set initial visibility
+	toggle_word_file_row()
 
 	def on_run():
 		input_file = excel_var.get()
@@ -179,8 +211,12 @@ def main():
 		output_dir = output_var.get()
 		check_open_ends = open_ends_var.get()
 		check_ai_bot_search = ai_bot_search_var.get()
+		word_file = word_file_var.get()
 		if not input_file or not include_file or not output_dir:
 			messagebox.showerror("Error", ERROR_SELECT_FILES)
+			return
+		if check_ai_bot_search and not word_file:
+			messagebox.showerror("Error", "Please select a .txt file with search words.")
 			return
 
 		# Step-by-step status with color and progress
@@ -188,9 +224,9 @@ def main():
 			status.set_status(msg, "blue")
 
 		status.set_status("Step 1 of 5: Loading your Excel file...  This may take a minute for large files.", "blue")
-		# Pass check_words and words_file to run_data_extract if needed
+		# Pass word_file to run_data_extract if needed
 		success = run_data_extract(
-			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, status_callback=status_callback
+			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback
 		)
 		if success:
 			status.set_status("Step 5 of 5: Done! Your files are ready.", "green")
