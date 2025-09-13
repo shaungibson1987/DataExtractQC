@@ -4,46 +4,17 @@ from pathlib import Path
 import sys
 import traceback
 from tqdm import tqdm
-
-def log_error(message, error_log_path):
-    with open(error_log_path, 'a', encoding='utf-8') as f:
-        f.write(message + '\n')
-        f.write(traceback.format_exc() + '\n')
-
-def get_open_ends(df):
-    cols = list(df.columns)
-    if 'TESTJUMP' in cols:
-        start_idx = cols.index('TESTJUMP') + 1
-    elif 'TESTLANG' in cols:
-        start_idx = cols.index('TESTLANG') + 1
-    elif 'ReDemHasRun' in cols:
-        start_idx = cols.index('ReDemHasRun') + 1
-    else:
-        return []
-    open_end_cols = []
-    ignore_set = {"yes", "no", "dontknow"}
-    for col in cols[start_idx:]:
-        col_lower = col.lower()
-        values = df[col].dropna().astype(str)
-        values = [v.strip() for v in values if v.strip() != '']
-        if not values:
-            continue
-        # If all values are exactly Yes, No, or Dontknow (case-insensitive), skip this column
-        if all(v.lower() in ignore_set for v in values):
-            continue
-        if '.oth' in col_lower or '._oth' in col_lower:
-            open_end_cols.append(col)
-            continue
-        if any(not (v.startswith('_') or v[0].isdigit()) for v in values):
-            open_end_cols.append(col)
-    return open_end_cols
+from GetOpenEnds import get_open_ends
+from error_logging import log_error
+from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFIX, OVERALL_SUFFIX, LANGUAGE_SUFFIX_TEMPLATE, IGNORE_SET, STATUS_MESSAGES
+from debug_logging import debug
 
 def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, error_log_path=None, status_callback=None):
     import time
     from datetime import datetime
 
     if error_log_path is None:
-        error_log_path = os.path.join(os.path.dirname(input_file), 'error_log.txt')
+        error_log_path = os.path.join(os.path.dirname(input_file), ERROR_LOG_FILENAME)
 
     start_time = datetime.now()
     start_ts = time.time()
@@ -51,7 +22,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     # Step 1: Load Excel file
     try:
         if status_callback:
-            status_callback('Step 1 of 5: Loading your Excel file...')
+            status_callback(STATUS_MESSAGES['load_excel'])
         df = pd.read_excel(input_file, dtype=str)
     except Exception as e:
         log_error(f'Error reading Excel file: {e}', error_log_path)
@@ -64,10 +35,10 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         open_end_cols = []
         original_include_columns = []
         output_dir = Path(output_dir)
-        include_with_opens_path = output_dir / 'Include_withOpens.txt'
+        include_with_opens_path = output_dir / INCLUDE_WITH_OPENS_FILENAME
         if check_open_ends:
             if status_callback:
-                status_callback('Step 2 of 5: Scanning for open-ended questions in your data...')
+                status_callback(STATUS_MESSAGES['scan_open_ends'])
             open_end_cols = get_open_ends(df)
             try:
                 with open(include_file, 'r', encoding='utf-8') as f:
@@ -115,7 +86,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     # Step 3: Filter columns
     try:
         if status_callback:
-            status_callback('Step 3 of 5: Filtering columns and preparing output...')
+            status_callback(STATUS_MESSAGES['filter_columns'])
         all_columns = list(df.columns)
         selected_columns = [col for col in selected_columns if col in all_columns]
         if not selected_columns:
@@ -143,12 +114,13 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     # Step 5: Find unique InterviewLanguage values
     try:
         if status_callback:
-            status_callback('Step 4 of 5: Scanning for unique InterviewLanguage values...')
+            status_callback(STATUS_MESSAGES['scan_languages'])
         if 'InterviewLanguage' not in df.columns:
             if status_callback:
                 status_callback('InterviewLanguage column not found.')
             return False
         languages = df['InterviewLanguage'].dropna().unique()
+        debug(f"Languages found: {languages}")
     except Exception as e:
         log_error(f'Error finding InterviewLanguage values: {e}', error_log_path)
         if status_callback:
@@ -158,25 +130,25 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
     # Step 6: Create output files and enhanced log
     try:
         if status_callback:
-            status_callback('Step 5 of 5: Creating output files...')
+            status_callback(STATUS_MESSAGES['create_files'])
         base_name = os.path.splitext(os.path.basename(input_file))[0]
-        logfile_path = os.path.join(output_dir, f'{base_name}_log.txt')
+        logfile_path = os.path.join(output_dir, f'{base_name}{LOG_SUFFIX}')
         output_files = []
         char_counts = {}
         outro_char_counts = {}
         # Overall file
-        overall_file = os.path.join(output_dir, f'{base_name}__Overall.xlsx')
+        overall_file = os.path.join(output_dir, f'{base_name}{OVERALL_SUFFIX}')
         df[selected_columns].to_excel(overall_file, index=False)
         output_files.append(overall_file)
-        char_counts[overall_file] = df[selected_columns].astype(str).applymap(len).sum().sum()
+        char_counts[overall_file] = df[selected_columns].astype(str).apply(lambda col: col.map(len)).sum().sum()
         outro_char_counts[overall_file] = df['outro'].astype(str).apply(len).sum() if 'outro' in df.columns else 0
         # Per-language files
         for lang in languages:
             lang_df = df[df['InterviewLanguage'] == lang][selected_columns]
-            out_file = os.path.join(output_dir, f'{base_name}__{lang}.xlsx')
+            out_file = os.path.join(output_dir, f'{base_name}{LANGUAGE_SUFFIX_TEMPLATE.format(lang=lang)}')
             lang_df.to_excel(out_file, index=False)
             output_files.append(out_file)
-            char_counts[out_file] = lang_df.astype(str).applymap(len).sum().sum()
+            char_counts[out_file] = lang_df.astype(str).apply(lambda col: col.map(len)).sum().sum()
             outro_char_counts[out_file] = lang_df['outro'].astype(str).apply(len).sum() if 'outro' in lang_df.columns else 0
         end_time = datetime.now()
         end_ts = time.time()

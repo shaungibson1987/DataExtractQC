@@ -1,32 +1,32 @@
 import pandas as pd
 
-def print_open_ends(file_path, incentive_col):
-    df = pd.read_excel(file_path, dtype=str)
+
+def get_open_ends(df):
     cols = list(df.columns)
-    try:
-        start_idx = cols.index(incentive_col) + 1
-    except ValueError:
-        print(f"Column '{incentive_col}' not found.")
-        return
+    if 'TESTJUMP' in cols:
+        start_idx = cols.index('TESTJUMP') + 1
+    elif 'TESTLANG' in cols:
+        start_idx = cols.index('TESTLANG') + 1
+    elif 'ReDemHasRun' in cols:
+        start_idx = cols.index('ReDemHasRun') + 1
+    else:
+        return []
     open_end_cols = []
+    ignore_set = {"yes", "no", "dontknow", "_ref"}
     for col in cols[start_idx:]:
         col_lower = col.lower()
-        # Get non-blank values only
         values = df[col].dropna().astype(str)
-        values = [v for v in values if v.strip() != '']
-        # Skip column if all cells are blank
+        values = [v.strip() for v in values if v.strip() != '']
         if not values:
             continue
-        # Include columns with .oth or ._oth in the name, but only if not all blank
+        if all(v.lower() in ignore_set for v in values):
+            continue
         if '.oth' in col_lower or '._oth' in col_lower:
             open_end_cols.append(col)
             continue
-        # Check if any value does NOT start with a digit or '_'
-        if any(not (v.startswith('_') or v[0].isdigit()) for v in values):
+        # Only consider as open end if at least one value is longer than 3 characters
+        has_long_value = any(len(v) > 3 for v in values)
+        if has_long_value and any(not (v.startswith('_') or v[0].isdigit()) for v in values):
             open_end_cols.append(col)
-    # Print in include.txt format (one column per line, no semicolons)
-    for col in open_end_cols:
-        print(col)
+    return open_end_cols
 
-# Example usage:
-print_open_ends(r'C:\Yonder\Box\Yonder Data Solutions\DataExtractQC\P026776\P026776.xlsx', 'TESTJUMP')
