@@ -5,7 +5,7 @@ from tkinter import filedialog, messagebox
 from core import run_data_extract
 from themes_list import THEMES
 from status_handler import StatusHandler
-from constants import LABEL_BROWSE, LABEL_MENU, LABEL_RUN_EXTRACTION, LABEL_DATA_FILE, LABEL_INCLUDE_FILE, LABEL_OUTPUT_FOLDER, LABEL_OPEN_ENDS, ERROR_SELECT_FILES, ERROR_GENERIC
+from constants import LABEL_BROWSE, LABEL_MENU, LABEL_RUN_EXTRACTION, LABEL_DATA_FILE, LABEL_INCLUDE_FILE, LABEL_OUTPUT_FOLDER, LABEL_OPEN_ENDS, LABEL_AI_BOT_SEARCH, ERROR_SELECT_FILES, ERROR_GENERIC
 
 # Tooltip helper class
 class ToolTip(object):
@@ -48,6 +48,7 @@ def main():
 	include_var = tk.StringVar()
 	output_var = tk.StringVar()
 	open_ends_var = tk.BooleanVar()
+	ai_bot_search_var = tk.BooleanVar()
 	status_var = tk.StringVar()
 
 	# --- File/folder selection functions ---
@@ -154,19 +155,30 @@ def main():
 	# Options Section
 	options_frame = tb.Frame(content_frame)
 	options_frame.pack(pady=(0, 10), padx=20, fill="x")
+
+
 	cb_open_ends = tb.Checkbutton(
 		options_frame,
 		text=LABEL_OPEN_ENDS,
 		variable=open_ends_var,
 		bootstyle="success-round-toggle"
 	)
-	cb_open_ends.pack(anchor="w")
+	cb_open_ends.pack(anchor="w", pady=(0, 6))  # Add bottom padding
+
+	cb_ai_bot_search = tb.Checkbutton(
+		options_frame,
+		text=LABEL_AI_BOT_SEARCH,
+		variable=ai_bot_search_var,
+		bootstyle="success-round-toggle"
+	)
+	cb_ai_bot_search.pack(anchor="w")  # No extra padding needed here
 
 	def on_run():
 		input_file = excel_var.get()
 		include_file = include_var.get()
 		output_dir = output_var.get()
 		check_open_ends = open_ends_var.get()
+		check_ai_bot_search = ai_bot_search_var.get()
 		if not input_file or not include_file or not output_dir:
 			messagebox.showerror("Error", ERROR_SELECT_FILES)
 			return
@@ -178,7 +190,7 @@ def main():
 		status.set_status("Step 1 of 5: Loading your Excel file...  This may take a minute for large files.", "blue")
 		# Pass check_words and words_file to run_data_extract if needed
 		success = run_data_extract(
-			input_file, include_file, output_dir, check_open_ends, status_callback=status_callback
+			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, status_callback=status_callback
 		)
 		if success:
 			status.set_status("Step 5 of 5: Done! Your files are ready.", "green")

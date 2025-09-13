@@ -27,6 +27,7 @@ LABEL_DATA_FILE = "Data File (.xlsx):"
 LABEL_INCLUDE_FILE = "Include.txt file:"
 LABEL_OUTPUT_FOLDER = "Output folder:"
 LABEL_OPEN_ENDS = "Automatically search the data file for open ends."
+LABEL_AI_BOT_SEARCH = "Search for AI/BOT/CHATBOT in all data (after extraction)"
 
 # Error Messages - used in data_extract_gui.py and core.py
 ERROR_SELECT_FILES = "Please select all required files and output folder."
