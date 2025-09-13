@@ -5,7 +5,7 @@ from tkinter import filedialog, messagebox
 from core import run_data_extract
 from themes_list import THEMES
 from status_handler import StatusHandler
-from constants import LABEL_BROWSE, LABEL_MENU, LABEL_RUN_EXTRACTION, LABEL_DATA_FILE, LABEL_INCLUDE_FILE, LABEL_OUTPUT_FOLDER, LABEL_OPEN_ENDS, LABEL_AI_BOT_SEARCH, ERROR_SELECT_FILES, ERROR_GENERIC
+from constants import LABEL_BROWSE, LABEL_MENU, LABEL_RUN_EXTRACTION, LABEL_DATA_FILE, LABEL_INCLUDE_FILE, LABEL_OUTPUT_FOLDER, LABEL_OPEN_ENDS, LABEL_AI_BOT_SEARCH, ERROR_SELECT_FILES, ERROR_GENERIC, STATUS_MESSAGES
 
 # Tooltip helper class
 class ToolTip(object):
@@ -41,7 +41,7 @@ def main():
 	current_theme = {"name": "yeti"}
 	app = tb.Window(themename=current_theme["name"])
 	app.title("Data Extract QC")
-	app.geometry("650x500")
+	app.geometry("650x600")  # Increased height for a taller app
 
 	# Variables for form fields and status
 	excel_var = tk.StringVar()
@@ -223,13 +223,13 @@ def main():
 		def status_callback(msg):
 			status.set_status(msg, "blue")
 
-		status.set_status("Step 1 of 5: Loading your Excel file...  This may take a minute for large files.", "blue")
+		status.set_status(STATUS_MESSAGES['load_excel'], "blue")
 		# Pass word_file to run_data_extract if needed
 		success = run_data_extract(
 			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback
 		)
 		if success:
-			status.set_status("Step 5 of 5: Done! Your files are ready.", "green")
+			status.set_status("Done!!! Your files are ready, check your output folder.", "green")
 			messagebox.showinfo("Done", "Processing complete! See output folder for results.")
 		else:
 			status.set_status(ERROR_GENERIC, "red")
@@ -242,7 +242,7 @@ def main():
 	# Status bar at the very bottom (fixed using pack)
 	status_bar = tb.Frame(app, bootstyle="light")
 	status_bar.pack(side="bottom", fill="x")
-	status_label = tb.Label(status_bar, textvariable=status_var, bootstyle="secondary", anchor="w")
+	status_label = tb.Label(status_bar, textvariable=status_var, bootstyle="secondary", anchor="w", font=("Segoe UI", 12))  # Larger font
 	status_label.pack(fill="x", padx=10, pady=2)
 
 	status = StatusHandler(status_var, status_label, app)

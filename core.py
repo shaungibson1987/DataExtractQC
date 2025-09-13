@@ -144,9 +144,14 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         outro_char_counts[overall_file] = df['outro'].astype(str).apply(len).sum() if 'outro' in df.columns else 0
 
         # --- Word search post-processing ---
+        if status_callback and check_ai_bot_search:
+            status_callback(STATUS_MESSAGES['word_search'])
         word_search_serials = None
+        highlighted_cells = set()
         if check_ai_bot_search:
             import re
+            from openpyxl import load_workbook
+            from openpyxl.styles import PatternFill
             # Read search words from file
             search_words = []
             if word_file:
@@ -184,6 +189,8 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                                 respondent_serial = row.get('serial', idx)
                                 matches.append((respondent_serial, col, cell))
                                 flagged_serials.add(respondent_serial)
+                                # Track cell for highlighting: (row_idx, col_idx)
+                                highlighted_cells.add((idx + 2, df_overall.columns.get_loc(col) + 1))  # +2 for header and 1-based index
                                 break  # Only log once per cell
                 word_search_serials = sorted(flagged_serials, key=lambda x: str(x))
                 if matches:
@@ -192,6 +199,40 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                         debug(f"  Respondent: {respondent_serial}, Column: {col}, Value: {cell}")
                 else:
                     debug("[Word Search] No matches found.")
+                # --- Create highlighted Excel file with CHECKS column if matches found ---
+                if highlighted_cells:
+                    highlighted_file = os.path.join(output_dir, f'{base_name}__Overall_highlighted.xlsx')
+                    # Load the original overall file as DataFrame
+                    df_highlight = pd.read_excel(overall_file, dtype=str)
+                    # Find index of respondent.serial column
+                    serial_col = None
+                    for i, col in enumerate(df_highlight.columns):
+                        if col.lower() in ("serial", "respondent.serial", "respondent_serial"):
+                            serial_col = col
+                            break
+                    # Build set of row indices with word matches
+                    rows_with_match = set([idx for idx, row in df_highlight.iterrows() if row.get('serial', idx) in flagged_serials])
+                    # Insert CHECKS column after serial
+                    insert_at = 1
+                    if serial_col and serial_col in df_highlight.columns:
+                        insert_at = df_highlight.columns.get_loc(serial_col) + 1
+                    checks_col = ["WORDS" if idx in rows_with_match else "" for idx in df_highlight.index]
+                    df_highlight.insert(insert_at, "CHECKS", checks_col)
+                    # Sort so rows with 'WORDS' in CHECKS are at the top
+                    df_highlight_sorted = df_highlight.copy()
+                    if "CHECKS" in df_highlight_sorted.columns:
+                        df_highlight_sorted["_sort"] = df_highlight_sorted["CHECKS"].apply(lambda x: 0 if x == "WORDS" else 1)
+                        df_highlight_sorted = df_highlight_sorted.sort_values(by="_sort").drop(columns=["_sort"])
+                    # Save to Excel with openpyxl engine to preserve formatting
+                    df_highlight_sorted.to_excel(highlighted_file, index=False, engine='openpyxl')
+                    # Now highlight the cells
+                    wb = load_workbook(highlighted_file)
+                    ws = wb.active
+                    red_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
+                    for row_idx, col_idx in highlighted_cells:
+                        ws.cell(row=row_idx, column=col_idx + 1).fill = red_fill  # +1 to account for CHECKS column
+                    wb.save(highlighted_file)
+                    debug(f"[Word Search] Highlighted file with CHECKS column created: {highlighted_file}")
             except Exception as e:
                 debug(f"[Word Search] Error during search: {e}")
         # Per-language files
