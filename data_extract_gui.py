@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox
 from core import run_data_extract
 from themes_list import THEMES
 from status_handler import StatusHandler
+from constants import LABEL_BROWSE, LABEL_MENU, LABEL_RUN_EXTRACTION, LABEL_DATA_FILE, LABEL_INCLUDE_FILE, LABEL_OUTPUT_FOLDER, LABEL_OPEN_ENDS, ERROR_SELECT_FILES, ERROR_GENERIC
 
 # Tooltip helper class
 class ToolTip(object):
@@ -118,35 +119,35 @@ def main():
 	form_frame.pack(pady=10, padx=20, fill="x")
 
 	# Data File
-	lbl_file = tb.Label(form_frame, text="Data File (.xlsx):", anchor="w")
+	lbl_file = tb.Label(form_frame, text=LABEL_DATA_FILE, anchor="w")
 	lbl_file.pack(anchor="w")
 	file_row = tb.Frame(form_frame)
 	file_row.pack(fill="x", pady=(0, 10))
 	excel_entry = tb.Entry(file_row, textvariable=excel_var)
 	excel_entry.pack(side="left", fill="x", expand=True)
-	btn_browse_excel = tb.Button(file_row, text="Browse", bootstyle=PRIMARY, command=select_excel)
+	btn_browse_excel = tb.Button(file_row, text=LABEL_BROWSE, bootstyle=PRIMARY, command=select_excel)
 	btn_browse_excel.pack(side="left", padx=(8, 0))
 	ToolTip(excel_entry, "Select the Excel data file (.xlsx) to process.")
 
 	# Include.txt File
-	lbl_include = tb.Label(form_frame, text="Include.txt file:", anchor="w")
+	lbl_include = tb.Label(form_frame, text=LABEL_INCLUDE_FILE, anchor="w")
 	lbl_include.pack(anchor="w")
 	include_row = tb.Frame(form_frame)
 	include_row.pack(fill="x", pady=(0, 10))
 	include_entry = tb.Entry(include_row, textvariable=include_var)
 	include_entry.pack(side="left", fill="x", expand=True)
-	btn_browse_include = tb.Button(include_row, text="Browse", bootstyle=PRIMARY, command=select_include)
+	btn_browse_include = tb.Button(include_row, text=LABEL_BROWSE, bootstyle=PRIMARY, command=select_include)
 	btn_browse_include.pack(side="left", padx=(8, 0))
 	ToolTip(include_entry, "Select the include.txt file listing columns to extract.")
 
 	# Output Folder
-	lbl_output = tb.Label(form_frame, text="Output folder:", anchor="w")
+	lbl_output = tb.Label(form_frame, text=LABEL_OUTPUT_FOLDER, anchor="w")
 	lbl_output.pack(anchor="w")
 	output_row = tb.Frame(form_frame)
 	output_row.pack(fill="x", pady=(0, 10))
 	output_entry = tb.Entry(output_row, textvariable=output_var)
 	output_entry.pack(side="left", fill="x", expand=True)
-	btn_browse_output = tb.Button(output_row, text="Browse", bootstyle=PRIMARY, command=select_output)
+	btn_browse_output = tb.Button(output_row, text=LABEL_BROWSE, bootstyle=PRIMARY, command=select_output)
 	btn_browse_output.pack(side="left", padx=(8, 0))
 	ToolTip(output_entry, "Choose the folder where output files will be saved.")
 
@@ -155,7 +156,7 @@ def main():
 	options_frame.pack(pady=(0, 10), padx=20, fill="x")
 	cb_open_ends = tb.Checkbutton(
 		options_frame,
-		text="Automatically search the data file for open ends.",
+		text=LABEL_OPEN_ENDS,
 		variable=open_ends_var,
 		bootstyle="success-round-toggle"
 	)
@@ -166,17 +167,15 @@ def main():
 		include_file = include_var.get()
 		output_dir = output_var.get()
 		check_open_ends = open_ends_var.get()
-		# check_words = check_words_var.get()
-		# words_file = words_file_var.get()
 		if not input_file or not include_file or not output_dir:
-			messagebox.showerror("Error", "Please select all required files and output folder.")
+			messagebox.showerror("Error", ERROR_SELECT_FILES)
 			return
 
 		# Step-by-step status with color and progress
 		def status_callback(msg):
 			status.set_status(msg, "blue")
 
-		status.set_status("Step 1 of 5: Loading your Excel file...", "blue")
+		status.set_status("Step 1 of 5: Loading your Excel file...  This may take a minute for large files.", "blue")
 		# Pass check_words and words_file to run_data_extract if needed
 		success = run_data_extract(
 			input_file, include_file, output_dir, check_open_ends, status_callback=status_callback
@@ -185,11 +184,11 @@ def main():
 			status.set_status("Step 5 of 5: Done! Your files are ready.", "green")
 			messagebox.showinfo("Done", "Processing complete! See output folder for results.")
 		else:
-			status.set_status("Error: An error occurred. See error_log.txt for details.", "red")
-			messagebox.showerror("Error", "An error occurred. See error_log.txt for details.")
+			status.set_status(ERROR_GENERIC, "red")
+			messagebox.showerror("Error", ERROR_GENERIC)
 
 	# Run Button
-	btn_run = tb.Button(content_frame, text="Run Extraction", bootstyle=SUCCESS, command=on_run)
+	btn_run = tb.Button(content_frame, text=LABEL_RUN_EXTRACTION, bootstyle=SUCCESS, command=on_run)
 	btn_run.pack(pady=20)
 
 	# Status bar at the very bottom (fixed using pack)

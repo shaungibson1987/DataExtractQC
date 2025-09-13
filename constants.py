@@ -18,3 +18,16 @@ STATUS_MESSAGES = {
     'scan_languages': 'Step 4 of 5: Scanning for unique InterviewLanguage values...',
     'create_files': 'Step 5 of 5: Creating output files...'
 }
+
+# UI Labels
+LABEL_BROWSE = "Browse"
+LABEL_MENU = "Menu"
+LABEL_RUN_EXTRACTION = "Run Extraction"
+LABEL_DATA_FILE = "Data File (.xlsx):"
+LABEL_INCLUDE_FILE = "Include.txt file:"
+LABEL_OUTPUT_FOLDER = "Output folder:"
+LABEL_OPEN_ENDS = "Automatically search the data file for open ends."
+
+# Error Messages
+ERROR_SELECT_FILES = "Please select all required files and output folder."
+ERROR_GENERIC = "An error occurred. See error_log.txt for details."
