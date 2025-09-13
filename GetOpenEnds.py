@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 def get_open_ends(df):
     cols = list(df.columns)
     if 'TESTJUMP' in cols:
@@ -29,4 +28,3 @@ def get_open_ends(df):
         if has_long_value and any(not (v.startswith('_') or v[0].isdigit()) for v in values):
             open_end_cols.append(col)
     return open_end_cols
-
