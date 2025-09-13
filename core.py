@@ -219,12 +219,8 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                     checks_col = ["WORDS" if idx in rows_with_match else "" for idx in df_highlight.index]
                     df_highlight.insert(insert_at, "CHECKS", checks_col)
                     # Sort so rows with 'WORDS' in CHECKS are at the top
-                    df_highlight_sorted = df_highlight.copy()
-                    if "CHECKS" in df_highlight_sorted.columns:
-                        df_highlight_sorted["_sort"] = df_highlight_sorted["CHECKS"].apply(lambda x: 0 if x == "WORDS" else 1)
-                        df_highlight_sorted = df_highlight_sorted.sort_values(by="_sort").drop(columns=["_sort"])
-                    # Save to Excel with openpyxl engine to preserve formatting
-                    df_highlight_sorted.to_excel(highlighted_file, index=False, engine='openpyxl')
+                    # Do not sort by CHECKS; keep original order for correct highlighting
+                    df_highlight.to_excel(highlighted_file, index=False, engine='openpyxl')
                     # Now highlight the cells
                     wb = load_workbook(highlighted_file)
                     ws = wb.active
