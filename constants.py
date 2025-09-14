@@ -12,12 +12,13 @@ IGNORE_SET = {"yes", "no", "dontknow", "_ref"}
 
 # Status messages (optional, can be expanded) - used in core.py and data_extract_gui.py
 STATUS_MESSAGES = {
-    'load_excel': 'Step 1 of 6: Loading your Excel file... This may take a minute for large data files.',
-    'scan_open_ends': 'Step 2 of 6: Scanning for open-ended questions in your data...',
-    'filter_columns': 'Step 3 of 6: Filtering columns and preparing output...',
-    'scan_languages': 'Step 4 of 6: Scanning for unique InterviewLanguage values...',
-    'create_files': 'Step 5 of 6: Creating output files...',
-    'word_search': 'Step 6 of 6: Running word search and highlighting matches...'
+    'load_excel': 'Step 1 of 7: Loading your Excel file... This may take a minute for large data files.',
+    'scan_open_ends': 'Step 2 of 7: Scanning for open-ended questions in your data...',
+    'filter_columns': 'Step 3 of 7: Filtering columns and preparing output...',
+    'scan_languages': 'Step 4 of 7: Scanning for unique InterviewLanguage values...',
+    'create_files': 'Step 5 of 7: Creating output files...',
+    'word_search': 'Step 6 of 7: Running word search and highlighting matches...',
+    'length_checks': 'Step 7 of 7: Calculating average character length for each column...'
 }
 
 # UI Labels - used in data_extract_gui.py

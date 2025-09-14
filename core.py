@@ -1,3 +1,15 @@
+def log_average_column_lengths(df):
+    """Log the median character length of each column (ignoring blank cells) to the debug window."""
+    debug("[Column Lengths] Median character length per column (ignoring blanks):")
+    for col in df.columns:
+        # Drop blanks/NaN, convert to string, and measure length
+        non_blank = df[col].dropna().astype(str)
+        non_blank = non_blank[non_blank != ""]
+        if len(non_blank) == 0:
+            median_len = 0
+        else:
+            median_len = non_blank.map(len).median()
+        debug(f"{col} - {median_len:.2f}")
 import pandas as pd
 import os
 from pathlib import Path
@@ -225,10 +237,47 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                     wb = load_workbook(highlighted_file)
                     ws = wb.active
                     red_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
+                    orange_fill = PatternFill(start_color='FFFFA500', end_color='FFFFA500', fill_type='solid')
+                    # Calculate median lengths for each column (ignoring blanks)
+                    median_lengths = {}
+                    for col in df_highlight.columns:
+                        non_blank = df_highlight[col].dropna().astype(str)
+                        non_blank = non_blank[non_blank != ""]
+                        if len(non_blank) == 0:
+                            median_lengths[col] = 0
+                        else:
+                            median_lengths[col] = non_blank.map(len).median()
                     for row_idx, col_idx in highlighted_cells:
                         ws.cell(row=row_idx, column=col_idx + 1).fill = red_fill  # +1 to account for CHECKS column
+                    # Highlight cells >2.5x median in orange (skip header row)
+                    for i, row in enumerate(df_highlight.itertuples(index=False), start=2):
+                        for j, col in enumerate(df_highlight.columns, start=1):
+                            if col == "CHECKS":
+                                continue
+                            val = getattr(row, col) if hasattr(row, col) else ""
+                            if pd.isna(val) or val == "":
+                                continue
+                            try:
+                                cell_len = len(str(val))
+                                median_len = median_lengths.get(col, 0)
+                                if median_len > 0 and cell_len > 10 * median_len:
+                                    ws.cell(row=i, column=j).fill = orange_fill
+                                    # If not already flagged for WORDS, add/check CHECKS column for LENGTH
+                                    checks_col_idx = df_highlight.columns.get_loc("CHECKS") + 1
+                                    existing = ws.cell(row=i, column=checks_col_idx).value
+                                    if existing:
+                                        if "LENGTH" not in existing:
+                                            ws.cell(row=i, column=checks_col_idx).value = f"{existing},LENGTH"
+                                    else:
+                                        ws.cell(row=i, column=checks_col_idx).value = "LENGTH"
+                            except Exception:
+                                continue
                     wb.save(highlighted_file)
                     debug(f"[Word Search] Highlighted file with CHECKS column created: {highlighted_file}")
+                # Log average character length per column after word search
+                if status_callback:
+                    status_callback(STATUS_MESSAGES['length_checks'])
+                log_average_column_lengths(df_highlight)
             except Exception as e:
                 debug(f"[Word Search] Error during search: {e}")
         # Per-language files
