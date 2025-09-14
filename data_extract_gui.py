@@ -51,6 +51,7 @@ def main():
 	ai_bot_search_var = tk.BooleanVar()
 	status_var = tk.StringVar()
 	word_file_var = tk.StringVar()
+	duplicate_postcode_yob_var = tk.BooleanVar()
 
 	# --- File/folder selection functions ---
 	def select_excel():
@@ -158,7 +159,6 @@ def main():
 	options_frame = tb.Frame(content_frame)
 	options_frame.pack(pady=(0, 10), padx=20, fill="x")
 
-
 	cb_open_ends = tb.Checkbutton(
 		options_frame,
 		text=LABEL_OPEN_ENDS,
@@ -166,6 +166,15 @@ def main():
 		bootstyle="success-round-toggle"
 	)
 	cb_open_ends.pack(anchor="w", pady=(0, 16))  # Increased bottom padding
+
+	# Duplicate postcode/yob toggle
+	cb_duplicate_postcode_yob = tb.Checkbutton(
+		options_frame,
+		text="Check for duplicate postcode/YOB pairs",
+		variable=duplicate_postcode_yob_var,
+		bootstyle="warning-round-toggle"
+	)
+	cb_duplicate_postcode_yob.pack(anchor="w", pady=(0, 16))
 
 	# Frame for word search toggle and word file input
 	word_search_frame = tb.Frame(options_frame)
@@ -219,14 +228,16 @@ def main():
 			messagebox.showerror("Error", "Please select a .txt file with search words.")
 			return
 
+		check_duplicate_postcode_yob = duplicate_postcode_yob_var.get()
+
 		# Step-by-step status with color and progress
 		def status_callback(msg):
 			status.set_status(msg, "blue")
 
 		status.set_status(STATUS_MESSAGES['load_excel'], "blue")
-		# Pass word_file to run_data_extract if needed
+		# Pass word_file and duplicate toggle to run_data_extract
 		success = run_data_extract(
-			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback
+			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback, check_duplicate_postcode_yob=check_duplicate_postcode_yob
 		)
 		if success:
 			status.set_status("Done!!! Your files are ready, check your output folder.", "green")

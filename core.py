@@ -21,9 +21,10 @@ from error_logging import log_error
 from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFIX, OVERALL_SUFFIX, LANGUAGE_SUFFIX_TEMPLATE, IGNORE_SET, STATUS_MESSAGES
 from debug_logging import debug
 
-def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None):
+def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None, check_duplicate_postcode_yob=False):
     import time
     from datetime import datetime
+
 
     if error_log_path is None:
         error_log_path = os.path.join(os.path.dirname(input_file), ERROR_LOG_FILENAME)
@@ -238,6 +239,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                     ws = wb.active
                     red_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
                     orange_fill = PatternFill(start_color='FFFFA500', end_color='FFFFA500', fill_type='solid')
+                    yellow_fill = PatternFill(start_color='FFFFFF00', end_color='FFFFFF00', fill_type='solid')
                     # Calculate median lengths for each column (ignoring blanks)
                     median_lengths = {}
                     for col in df_highlight.columns:
@@ -249,7 +251,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                             median_lengths[col] = non_blank.map(len).median()
                     for row_idx, col_idx in highlighted_cells:
                         ws.cell(row=row_idx, column=col_idx + 1).fill = red_fill  # +1 to account for CHECKS column
-                    # Highlight cells >2.5x median in orange (skip header row)
+                    # Highlight cells >10x median in orange (skip header row)
                     for i, row in enumerate(df_highlight.itertuples(index=False), start=2):
                         for j, col in enumerate(df_highlight.columns, start=1):
                             if col == "CHECKS":
@@ -257,21 +259,65 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                             val = getattr(row, col) if hasattr(row, col) else ""
                             if pd.isna(val) or val == "":
                                 continue
-                            try:
-                                cell_len = len(str(val))
-                                median_len = median_lengths.get(col, 0)
-                                if median_len > 0 and cell_len > 10 * median_len:
-                                    ws.cell(row=i, column=j).fill = orange_fill
-                                    # If not already flagged for WORDS, add/check CHECKS column for LENGTH
-                                    checks_col_idx = df_highlight.columns.get_loc("CHECKS") + 1
-                                    existing = ws.cell(row=i, column=checks_col_idx).value
-                                    if existing:
-                                        if "LENGTH" not in existing:
-                                            ws.cell(row=i, column=checks_col_idx).value = f"{existing},LENGTH"
-                                    else:
-                                        ws.cell(row=i, column=checks_col_idx).value = "LENGTH"
-                            except Exception:
-                                continue
+                            cell_len = len(str(val))
+                            median_len = median_lengths.get(col, 0)
+                            if median_len > 0 and cell_len > 10 * median_len:
+                                ws.cell(row=i, column=j).fill = orange_fill
+                                # If not already flagged for WORDS, add/check CHECKS column for LENGTH
+                                checks_col_idx = df_highlight.columns.get_loc("CHECKS") + 1
+                                existing = ws.cell(row=i, column=checks_col_idx).value
+                                if existing:
+                                    if "LENGTH" not in existing:
+                                        ws.cell(row=i, column=checks_col_idx).value = f"{existing},LENGTH"
+                                else:
+                                    ws.cell(row=i, column=checks_col_idx).value = "LENGTH"
+                    # --- Highlight duplicate (postcode, yob) pairs and flag CHECKS ---
+                    duplicate_log_lines = []
+                    if check_duplicate_postcode_yob:
+                        try:
+                            postcode_col = None
+                            yob_col = None
+                            for idx, col in enumerate(df_highlight.columns):
+                                if col.lower() == "personal_ros_postcode":
+                                    postcode_col = col
+                                if col.lower() == "personal_ros_yob":
+                                    yob_col = col
+                            if postcode_col and yob_col:
+                                # Exclude rows where postcode is blank or contains _dk01rf_ (case-insensitive), or yob is blank
+                                pairs = df_highlight[[postcode_col, yob_col]].astype(str)
+                                mask_valid = (
+                                    (pairs[postcode_col].str.strip() != "") &
+                                    (pairs[yob_col].str.strip() != "") &
+                                    (~pairs[postcode_col].str.lower().str.contains("_dk01rf_"))
+                                )
+                                pairs_valid = pairs[mask_valid]
+                                # Find all duplicate groups
+                                dup_groups = pairs_valid.groupby([postcode_col, yob_col]).filter(lambda x: len(x) > 1)
+                                for (postcode, yob), group in dup_groups.groupby([postcode_col, yob_col]):
+                                    for idx_df in group.index:
+                                        postcode_val = str(df_highlight.at[idx_df, postcode_col]) if pd.notnull(df_highlight.at[idx_df, postcode_col]) else ""
+                                        yob_val = str(df_highlight.at[idx_df, yob_col]) if pd.notnull(df_highlight.at[idx_df, yob_col]) else ""
+                                        # Skip blank or refused
+                                        if postcode_val.strip() == "" or yob_val.strip() == "":
+                                            continue
+                                        if "_dk01rf_" in postcode_val.lower():
+                                            continue
+                                        excel_row = idx_df + 2  # DataFrame index to Excel row
+                                        ws.cell(row=excel_row, column=df_highlight.columns.get_loc(postcode_col)+1).fill = yellow_fill
+                                        ws.cell(row=excel_row, column=df_highlight.columns.get_loc(yob_col)+1).fill = yellow_fill
+                                        # Add DUPLICATE to CHECKS
+                                        checks_col_idx = df_highlight.columns.get_loc("CHECKS") + 1
+                                        existing = ws.cell(row=excel_row, column=checks_col_idx).value
+                                        if existing:
+                                            if "DUPLICATE" not in existing:
+                                                ws.cell(row=excel_row, column=checks_col_idx).value = f"{existing},DUPLICATE"
+                                        else:
+                                            ws.cell(row=excel_row, column=checks_col_idx).value = "DUPLICATE"
+                                        # Log serial and pair
+                                        serial_val = df_highlight.at[idx_df, serial_col] if serial_col else idx_df
+                                        duplicate_log_lines.append(f"Serial: {serial_val} | Postcode: {postcode_val} | YOB: {yob_val}")
+                        except Exception as e:
+                            debug(f"[Duplicate Check] Error: {e}")
                     wb.save(highlighted_file)
                     debug(f"[Word Search] Highlighted file with CHECKS column created: {highlighted_file}")
                 # Log average character length per column after word search
@@ -338,6 +384,29 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                 log_lines.append("No respondents flagged by word search.")
         else:
             log_lines.append("Word search not applied.")
+
+        # --- Append duplicate log if any ---
+        if check_duplicate_postcode_yob and 'duplicate_log_lines' in locals() and duplicate_log_lines:
+            log_lines.append("")
+            log_lines.append("Duplicate Postcode/YOB Pairs Found:")
+            for line in duplicate_log_lines:
+                log_lines.append(line)
+        # --- Append column median lengths at the bottom ---
+        log_lines.append("")
+        log_lines.append("Column Median Lengths:")
+        # Use the overall file for median calculation
+        try:
+            df_overall_for_median = pd.read_excel(overall_file, dtype=str)
+            for col in df_overall_for_median.columns:
+                non_blank = df_overall_for_median[col].dropna().astype(str)
+                non_blank = non_blank[non_blank != ""]
+                if len(non_blank) == 0:
+                    median_len = 0
+                else:
+                    median_len = non_blank.map(len).median()
+                log_lines.append(f"  {col}: {median_len:.2f}")
+        except Exception as e:
+            log_lines.append(f"  [Error calculating medians: {e}]")
 
         with open(logfile_path, 'w', encoding='utf-8') as logf:
             for line in log_lines:
