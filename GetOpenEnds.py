@@ -8,6 +8,8 @@ def get_open_ends(df):
         start_idx = cols.index('TESTLANG') + 1
     elif 'ReDemHasRun' in cols:
         start_idx = cols.index('ReDemHasRun') + 1
+    elif 'ErrorLog' in cols:
+        start_idx = cols.index('ErrorLog') + 1
     else:
         return []
     open_end_cols = []
