@@ -22,28 +22,40 @@ from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFI
 from debug_logging import debug
 
 def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None, check_duplicate_postcode_yob=False):
+    print("[DEBUG] Starting run_data_extract")
     import time
     from datetime import datetime
 
 
+    # Ensure output_dir is a string for os.path checks
+    output_dir_str = str(output_dir)
+    if not os.path.isdir(output_dir_str):
+        try:
+            os.makedirs(output_dir_str, exist_ok=True)
+        except Exception:
+            # If we can't create the output dir, fallback to input file dir
+            output_dir_str = os.path.dirname(input_file)
     if error_log_path is None:
-        error_log_path = os.path.join(os.path.dirname(input_file), ERROR_LOG_FILENAME)
+        error_log_path = os.path.join(output_dir_str, ERROR_LOG_FILENAME)
 
     start_time = datetime.now()
     start_ts = time.time()
 
     # Step 1: Load Excel file
+    print("[DEBUG] Step 1: Loading Excel file...")
     try:
         if status_callback:
             status_callback(STATUS_MESSAGES['load_excel'])
         df = pd.read_excel(input_file, dtype=str)
     except Exception as e:
         log_error(f'Error reading Excel file: {e}', error_log_path)
+        print("[DEBUG] Error occurred during Step 1: Loading Excel file")
         if status_callback:
             status_callback('Error: Could not read the Excel file. Please check the file and try again.')
         return False
 
     # Step 2: Handle include.txt and open ends
+    print("[DEBUG] Step 2: Handling include.txt and open ends...")
     try:
         open_end_cols = []
         original_include_columns = []
@@ -52,7 +64,13 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
         if check_open_ends:
             if status_callback:
                 status_callback(STATUS_MESSAGES['scan_open_ends'])
-            open_end_cols = get_open_ends(df)
+            try:
+                open_end_cols = get_open_ends(df)
+            except Exception as e:
+                log_error(f'Error in get_open_ends: {e}', error_log_path)
+                if status_callback:
+                    status_callback('Error: Could not extract open ends from the data.')
+                return False
             try:
                 with open(include_file, 'r', encoding='utf-8') as f:
                     original_include_columns = [line.strip() for line in f if line.strip()]
@@ -92,11 +110,13 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             selected_columns = original_include_columns
     except Exception as e:
         log_error(f'Unexpected error handling include.txt: {e}', error_log_path)
+        print("[DEBUG] Error occurred during Step 2: Handling include.txt and open ends")
         if status_callback:
             status_callback('Error: Unexpected error handling include.txt.')
         return False
 
     # Step 3: Filter columns
+    print("[DEBUG] Step 3: Filtering columns...")
     try:
         if status_callback:
             status_callback(STATUS_MESSAGES['filter_columns'])
@@ -108,11 +128,13 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             return False
     except Exception as e:
         log_error(f'Error processing selected columns: {e}', error_log_path)
+        print("[DEBUG] Error occurred during Step 3: Filtering columns")
         if status_callback:
             status_callback('Error: Problem processing selected columns.')
         return False
 
     # Step 4: Check output directory
+    print("[DEBUG] Step 4: Checking output directory...")
     try:
         if not os.path.isdir(output_dir):
             if status_callback:
@@ -120,22 +142,24 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             return False
     except Exception as e:
         log_error(f'Error during output directory prompt: {e}', error_log_path)
+        print("[DEBUG] Error occurred during Step 4: Checking output directory")
         if status_callback:
             status_callback('Error: Problem with output directory.')
         return False
 
     # Step 5: Find unique InterviewLanguage values
+    print("[DEBUG] Step 5: Scanning for unique InterviewLanguage values...")
     try:
         if status_callback:
             status_callback(STATUS_MESSAGES['scan_languages'])
-        if 'InterviewLanguage' not in df.columns:
-            if status_callback:
-                status_callback('InterviewLanguage column not found.')
-            return False
+        if 'InterviewLanguage' not in df.columns or df['InterviewLanguage'].dropna().empty:
+            print("[DEBUG] InterviewLanguage column missing or empty, defaulting to ENG for all rows.")
+            df['InterviewLanguage'] = 'ENG'
         languages = df['InterviewLanguage'].dropna().unique()
         debug(f"Languages found: {languages}")
     except Exception as e:
         log_error(f'Error finding InterviewLanguage values: {e}', error_log_path)
+        print("[DEBUG] Error occurred during Step 5: Scanning for unique InterviewLanguage values")
         if status_callback:
             status_callback('Error: Could not find InterviewLanguage values.')
         return False
@@ -172,7 +196,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                     with open(word_file, 'r', encoding='utf-8') as wf:
                         search_words = [line.strip() for line in wf if line.strip()]
                 except Exception as e:
-                    debug(f"[Word Search] Error reading word file: {e}")
+                    log_error(f"[Word Search] Error reading word file: {e}", error_log_path)
             if not search_words:
                 search_words = ["AI", "CHATBOT", "BOT"]  # fallback
             debug(f"[Word Search] Search words: {search_words}")
@@ -317,7 +341,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                                         serial_val = df_highlight.at[idx_df, serial_col] if serial_col else idx_df
                                         duplicate_log_lines.append(f"Serial: {serial_val} | Postcode: {postcode_val} | YOB: {yob_val}")
                         except Exception as e:
-                            debug(f"[Duplicate Check] Error: {e}")
+                            log_error(f"[Duplicate Check] Error: {e}", error_log_path)
                     wb.save(highlighted_file)
                     debug(f"[Word Search] Highlighted file with CHECKS column created: {highlighted_file}")
                 # Log average character length per column after word search
@@ -325,7 +349,7 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                     status_callback(STATUS_MESSAGES['length_checks'])
                 log_average_column_lengths(df_highlight)
             except Exception as e:
-                debug(f"[Word Search] Error during search: {e}")
+                log_error(f"[Word Search] Error during search: {e}", error_log_path)
         # Per-language files
         for lang in languages:
             lang_df = df[df['InterviewLanguage'] == lang][selected_columns]
