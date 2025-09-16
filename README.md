@@ -4,11 +4,14 @@ A user-friendly tool for extracting and processing survey data from Excel files,
 
 ## Features
 - Simple graphical interface (Tkinter)
-- Automatic detection of open-ended columns
-- Customizable include file handling
+- All advanced checks are user-controllable via toggles (all off by default):
+   - Automatically detect and add open-ended columns
+   - Search for specific words (from a .txt file) and highlight matches
+   - Check for duplicate postcode/YOB pairs and flag them
+   - Length check: flag cells much longer than the median (multiplier adjustable)
+- Customizable include file handling (one column per line, no semicolons)
 - Detailed logging and error reporting
 - Output split by language and overall
-- Customizable include file handling (one column per line, no semicolons)
 
 ## Requirements
 - Python 3.8+
@@ -42,8 +45,12 @@ A user-friendly tool for extracting and processing survey data from Excel files,
    - Data file (.xlsx)
    - Include.txt file
    - Output folder
-   - (Optional) Enable open end detection
-3. Click **Run**. Progress and results will be shown in the app.
+   - (Optional) Enable any advanced checks you need (all toggles are off by default):
+     - Automatically search for open ends
+     - Search for specific words (provide a .txt file)
+     - Check for duplicate postcode/YOB pairs
+     - Enable length checks (set multiplier as needed)
+3. Click **Run**. Progress and results will be shown in the app. Flagged rows/cells will be highlighted in the output Excel files, with a CHECKS column indicating the reason.
 
 ## Building the .exe
 1. Make sure your virtual environment is activated.
@@ -51,11 +58,11 @@ A user-friendly tool for extracting and processing survey data from Excel files,
    ```bash
    pip install pyinstaller
    ```
-3. Build the executable:
+3. Build the executable (GUI only, no CLI window):
    ```bash
-   pyinstaller --onefile --windowed data_extract_gui.py
+   python -m PyInstaller --clean --noconfirm data_extract_gui.spec
    ```
-4. The .exe will be in the `dist` folder.
+4. The .exe will be in the `dist` folder as `data_extract_gui.exe`.
 
 ## Troubleshooting
 - Errors are logged to `error_log.txt` in the data file's folder.

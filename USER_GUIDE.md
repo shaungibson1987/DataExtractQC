@@ -22,12 +22,17 @@ DataExtractQC is a simple tool that helps you extract and organize survey data f
    - Click "Browse" next to **Include.txt file** and pick your include file (a text file listing the columns you want, one column name per line).
    - Click "Browse" next to **Output folder** and pick where you want the results saved.
 
-3. **(Optional) Automatically find open ends**
-   - If you want the program to look for open-ended questions, check the box "Automatically search the data file for open ends."
+
+3. **(Optional) Enable advanced checks**
+   - All advanced checks are off by default. Enable only the ones you need:
+     - **Automatically search the data file for open ends**: Finds and adds open-ended/text columns to your output.
+     - **Search file for specific words (words.txt)**: Flags and highlights cells containing words from a list you provide (one word per line in a .txt file). Click "Browse" to select your word list.
+     - **Check for duplicate postcode/YOB pairs**: Flags and highlights rows where the combination of postcode and year of birth is duplicated.
+     - **Enable length checks**: Flags and highlights cells that are unusually long compared to others in the same column. You can set the multiplier (default is 10) to control what counts as "unusually long" (e.g., 10× the median length for that column).
 
 4. **Run the extraction**
    - Click the **Run** button.
-   - The program will show you what it's doing (e.g., loading your file, finding open ends, creating output files).
+   - The program will show you what it's doing (e.g., loading your file, running checks, creating output files).
    - When finished, you'll see a message that your files are ready.
 
 5. **Check your results**
@@ -36,6 +41,7 @@ DataExtractQC is a simple tool that helps you extract and organize survey data f
      - Separate Excel files for each language in your data.
      - A log file with details about what was done.
      - (If you used open end detection) a new include file with open ends added.
+     - (If you enabled advanced checks) highlighted cells and a CHECKS column in the Excel output, showing which rows were flagged and why.
 
 ## Tips
 - If you see an error, check the error_log.txt file in your data folder for details.
@@ -43,7 +49,7 @@ DataExtractQC is a simple tool that helps you extract and organize survey data f
 - The program will never overwrite your original include.txt file.
 
 ## Need help?
-If you have questions or problems, contact your data team or open an issue on the GitHub page.
+If you have questions or problems, contact shaun.gibson@yonderdatasolutions.com or open an issue on the GitHub page.
 
 ---
 
