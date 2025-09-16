@@ -47,12 +47,12 @@ def main():
 	excel_var = tk.StringVar()
 	include_var = tk.StringVar()
 	output_var = tk.StringVar()
-	open_ends_var = tk.BooleanVar()
-	ai_bot_search_var = tk.BooleanVar()
+	open_ends_var = tk.BooleanVar(value=False)
+	ai_bot_search_var = tk.BooleanVar(value=False)
 	status_var = tk.StringVar()
 	word_file_var = tk.StringVar()
-	duplicate_postcode_yob_var = tk.BooleanVar()
-	length_check_var = tk.BooleanVar(value=True)
+	duplicate_postcode_yob_var = tk.BooleanVar(value=False)
+	length_check_var = tk.BooleanVar(value=False)
 	length_multiplier_var = tk.StringVar(value="10")
 
 	# --- File/folder selection functions ---
