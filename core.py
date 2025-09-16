@@ -21,7 +21,7 @@ from error_logging import log_error
 from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFIX, OVERALL_SUFFIX, LANGUAGE_SUFFIX_TEMPLATE, IGNORE_SET, STATUS_MESSAGES
 from debug_logging import debug
 
-def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None, check_duplicate_postcode_yob=False):
+def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None, check_duplicate_postcode_yob=False, check_length=True, length_multiplier=10):
     print("[DEBUG] Starting run_data_extract")
     import time
     from datetime import datetime
@@ -275,26 +275,27 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                             median_lengths[col] = non_blank.map(len).median()
                     for row_idx, col_idx in highlighted_cells:
                         ws.cell(row=row_idx, column=col_idx + 1).fill = red_fill  # +1 to account for CHECKS column
-                    # Highlight cells >10x median in orange (skip header row)
-                    for i, row in enumerate(df_highlight.itertuples(index=False), start=2):
-                        for j, col in enumerate(df_highlight.columns, start=1):
-                            if col == "CHECKS":
-                                continue
-                            val = getattr(row, col) if hasattr(row, col) else ""
-                            if pd.isna(val) or val == "":
-                                continue
-                            cell_len = len(str(val))
-                            median_len = median_lengths.get(col, 0)
-                            if median_len > 0 and cell_len > 10 * median_len:
-                                ws.cell(row=i, column=j).fill = orange_fill
-                                # If not already flagged for WORDS, add/check CHECKS column for LENGTH
-                                checks_col_idx = df_highlight.columns.get_loc("CHECKS") + 1
-                                existing = ws.cell(row=i, column=checks_col_idx).value
-                                if existing:
-                                    if "LENGTH" not in existing:
-                                        ws.cell(row=i, column=checks_col_idx).value = f"{existing},LENGTH"
-                                else:
-                                    ws.cell(row=i, column=checks_col_idx).value = "LENGTH"
+                    # Highlight cells > multiplier x median in orange (skip header row)
+                    if check_length:
+                        for i, row in enumerate(df_highlight.itertuples(index=False), start=2):
+                            for j, col in enumerate(df_highlight.columns, start=1):
+                                if col == "CHECKS":
+                                    continue
+                                val = getattr(row, col) if hasattr(row, col) else ""
+                                if pd.isna(val) or val == "":
+                                    continue
+                                cell_len = len(str(val))
+                                median_len = median_lengths.get(col, 0)
+                                if median_len > 0 and cell_len > length_multiplier * median_len:
+                                    ws.cell(row=i, column=j).fill = orange_fill
+                                    # If not already flagged for WORDS, add/check CHECKS column for LENGTH
+                                    checks_col_idx = df_highlight.columns.get_loc("CHECKS") + 1
+                                    existing = ws.cell(row=i, column=checks_col_idx).value
+                                    if existing:
+                                        if "LENGTH" not in existing:
+                                            ws.cell(row=i, column=checks_col_idx).value = f"{existing},LENGTH"
+                                    else:
+                                        ws.cell(row=i, column=checks_col_idx).value = "LENGTH"
                     # --- Highlight duplicate (postcode, yob) pairs and flag CHECKS ---
                     duplicate_log_lines = []
                     if check_duplicate_postcode_yob:

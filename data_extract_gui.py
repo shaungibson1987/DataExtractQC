@@ -52,6 +52,8 @@ def main():
 	status_var = tk.StringVar()
 	word_file_var = tk.StringVar()
 	duplicate_postcode_yob_var = tk.BooleanVar()
+	length_check_var = tk.BooleanVar(value=True)
+	length_multiplier_var = tk.StringVar(value="10")
 
 	# --- File/folder selection functions ---
 	def select_excel():
@@ -167,6 +169,30 @@ def main():
 	)
 	cb_open_ends.pack(anchor="w", pady=(0, 16))  # Increased bottom padding
 
+	# Length check toggle and multiplier
+	length_check_row = tb.Frame(options_frame)
+	cb_length_check = tb.Checkbutton(
+		length_check_row,
+		text="Enable length checks",
+		variable=length_check_var,
+		bootstyle="info-round-toggle"
+	)
+	cb_length_check.pack(side="left", anchor="w")
+
+	tb.Label(length_check_row, text="Multiplier:").pack(side="left", padx=(10, 2))
+	multiplier_entry = tb.Entry(length_check_row, textvariable=length_multiplier_var, width=5)
+	multiplier_entry.pack(side="left")
+
+	def toggle_multiplier_entry(*args):
+		if length_check_var.get():
+			multiplier_entry.config(state="normal")
+		else:
+			multiplier_entry.config(state="disabled")
+	length_check_var.trace_add('write', toggle_multiplier_entry)
+	toggle_multiplier_entry()
+
+	length_check_row.pack(anchor="w", pady=(0, 16))
+
 	# Duplicate postcode/yob toggle
 	cb_duplicate_postcode_yob = tb.Checkbutton(
 		options_frame,
@@ -229,15 +255,21 @@ def main():
 			return
 
 		check_duplicate_postcode_yob = duplicate_postcode_yob_var.get()
+		check_length = length_check_var.get()
+		try:
+			length_multiplier = int(length_multiplier_var.get())
+		except Exception:
+			length_multiplier = 10
 
 		# Step-by-step status with color and progress
 		def status_callback(msg):
 			status.set_status(msg, "blue")
 
 		status.set_status(STATUS_MESSAGES['load_excel'], "blue")
-		# Pass word_file and duplicate toggle to run_data_extract
+		# Pass word_file, duplicate toggle, length check toggle, and multiplier to run_data_extract
 		success = run_data_extract(
-			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback, check_duplicate_postcode_yob=check_duplicate_postcode_yob
+			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback,
+			check_duplicate_postcode_yob=check_duplicate_postcode_yob, check_length=check_length, length_multiplier=length_multiplier
 		)
 		if success:
 			status.set_status("Done!!! Your files are ready, check your output folder.", "green")
