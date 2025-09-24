@@ -12,8 +12,9 @@ venv/
 dist/
 build/
 
-# Ignore data folder and its contents
-data/
+# Ignore data folder and its contents (case-insensitive)
+[Dd]ata/
+[Dd]ata/*
 
 # Ignore OS files
 .DS_Store
@@ -22,10 +23,26 @@ Thumbs.db
 # Ignore log files
 *.log
 error_log.txt
+debug.log
 
-# Ignore Excel and CSV files (optional, remove if you want to track these)
+# Ignore Excel and CSV files (sample data)
 *.xlsx
 *.csv
+*.zip
 
-# Ignore include.txt if you don't want to track it (remove this line if you do)
-#include.txt
+# Ignore PyInstaller spec files (build artifacts)
+*.spec
+
+# Ignore user-specific files
+words.txt
+include.txt
+P027822.xlsx
+
+# Ignore generated documentation (keep source)
+DataExtractQC_User_Guide.docx
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
