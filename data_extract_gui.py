@@ -41,7 +41,7 @@ def main():
 	current_theme = {"name": "yeti"}
 	app = tb.Window(themename=current_theme["name"])
 	app.title("Data Extract QC")
-	app.geometry("650x600")  # Increased height for a taller app
+	app.geometry("650x680")  # Increased height further for sentiment analysis controls
 
 	# Variables for form fields and status
 	excel_var = tk.StringVar()
@@ -54,6 +54,9 @@ def main():
 	duplicate_postcode_yob_var = tk.BooleanVar(value=False)
 	length_check_var = tk.BooleanVar(value=False)
 	length_multiplier_var = tk.StringVar(value="10")
+	sentiment_analysis_var = tk.BooleanVar(value=False)
+	sentiment_pos_threshold_var = tk.StringVar(value="0.6")
+	sentiment_neg_threshold_var = tk.StringVar(value="0")
 
 	# --- File/folder selection functions ---
 	def select_excel():
@@ -202,6 +205,36 @@ def main():
 	)
 	cb_duplicate_postcode_yob.pack(anchor="w", pady=(0, 16))
 
+	# Sentiment analysis toggle and thresholds
+	sentiment_row = tb.Frame(options_frame)
+	cb_sentiment = tb.Checkbutton(
+		sentiment_row,
+		text="Sentiment analysis on outro column",
+		variable=sentiment_analysis_var,
+		bootstyle="info-round-toggle"
+	)
+	cb_sentiment.pack(side="left", anchor="w")
+
+	tb.Label(sentiment_row, text="Pos:").pack(side="left", padx=(10, 2))
+	pos_threshold_entry = tb.Entry(sentiment_row, textvariable=sentiment_pos_threshold_var, width=5)
+	pos_threshold_entry.pack(side="left")
+
+	tb.Label(sentiment_row, text="Neg:").pack(side="left", padx=(5, 2))
+	neg_threshold_entry = tb.Entry(sentiment_row, textvariable=sentiment_neg_threshold_var, width=5)
+	neg_threshold_entry.pack(side="left")
+
+	def toggle_sentiment_entries(*args):
+		if sentiment_analysis_var.get():
+			pos_threshold_entry.config(state="normal")
+			neg_threshold_entry.config(state="normal")
+		else:
+			pos_threshold_entry.config(state="disabled")
+			neg_threshold_entry.config(state="disabled")
+	sentiment_analysis_var.trace_add('write', toggle_sentiment_entries)
+	toggle_sentiment_entries()
+
+	sentiment_row.pack(anchor="w", pady=(0, 16))
+
 	# Frame for word search toggle and word file input
 	word_search_frame = tb.Frame(options_frame)
 	word_search_frame.pack(anchor="w", fill="x")
@@ -261,15 +294,27 @@ def main():
 		except Exception:
 			length_multiplier = 10
 
+		# Get sentiment analysis parameters
+		check_sentiment = sentiment_analysis_var.get()
+		try:
+			sentiment_pos_threshold = float(sentiment_pos_threshold_var.get())
+		except Exception:
+			sentiment_pos_threshold = 0.05
+		try:
+			sentiment_neg_threshold = float(sentiment_neg_threshold_var.get())
+		except Exception:
+			sentiment_neg_threshold = -0.05
+
 		# Step-by-step status with color and progress
 		def status_callback(msg):
 			status.set_status(msg, "blue")
 
 		status.set_status(STATUS_MESSAGES['load_excel'], "blue")
-		# Pass word_file, duplicate toggle, length check toggle, and multiplier to run_data_extract
+		# Pass word_file, duplicate toggle, length check toggle, multiplier, and sentiment parameters to run_data_extract
 		success = run_data_extract(
 			input_file, include_file, output_dir, check_open_ends, check_ai_bot_search, word_file, status_callback=status_callback,
-			check_duplicate_postcode_yob=check_duplicate_postcode_yob, check_length=check_length, length_multiplier=length_multiplier
+			check_duplicate_postcode_yob=check_duplicate_postcode_yob, check_length=check_length, length_multiplier=length_multiplier,
+			check_sentiment=check_sentiment, sentiment_pos_threshold=sentiment_pos_threshold, sentiment_neg_threshold=sentiment_neg_threshold
 		)
 		if success:
 			status.set_status("Done!!! Your files are ready, check your output folder.", "green")

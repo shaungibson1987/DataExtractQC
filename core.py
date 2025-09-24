@@ -1,3 +1,71 @@
+import pandas as pd
+import os
+from pathlib import Path
+import sys
+import traceback
+from tqdm import tqdm
+from GetOpenEnds import get_open_ends
+from error_logging import log_error
+from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFIX, OVERALL_SUFFIX, LANGUAGE_SUFFIX_TEMPLATE, IGNORE_SET, STATUS_MESSAGES
+from debug_logging import debug
+try:
+    from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+    VADER_AVAILABLE = True
+except ImportError:
+    VADER_AVAILABLE = False
+    print("Warning: vaderSentiment not available. Sentiment analysis will be skipped.")
+
+# Enhanced sentiment analysis with complaint detection
+COMPLAINT_INDICATORS = [
+    "feel deceived", "disappointed", "not the first time", 
+    "longer than stated", "inaccurate", "misleading", "dishonest",
+    "not what was promised", "expected better", "waste of time",
+    "frustrated", "annoyed", "should have been told", "poor service",
+    "twice as long", "much longer", "far longer", "way longer",
+    "completely wrong", "totally wrong", "absolutely wrong",
+    "very disappointed", "extremely disappointed", "highly disappointed",
+    "poor quality", "terrible quality", "awful quality", "bad quality",
+    "unprofessional", "unacceptable", "ridiculous", "outrageous", "too long", "disingenuous survey", "very long", "same question", "longer than estimated", "impossible to answer"
+]
+
+def detect_complaints(text):
+    """
+    Detect complaint patterns in text.
+    Returns: (is_complaint: bool, complaint_count: int, found_patterns: list)
+    """
+    if not text or pd.isna(text):
+        return False, 0, []
+    
+    text_lower = str(text).lower()
+    found_patterns = []
+    
+    for indicator in COMPLAINT_INDICATORS:
+        if indicator in text_lower:
+            found_patterns.append(indicator)
+    
+    complaint_count = len(found_patterns)
+    is_complaint = complaint_count > 0
+    
+    return is_complaint, complaint_count, found_patterns
+
+def enhanced_sentiment_score(text, vader_score):
+    """
+    Apply weighted scoring to adjust VADER sentiment for obvious complaints.
+    Returns: (adjusted_score: float, adjustment_applied: float, complaint_patterns: list)
+    """
+    is_complaint, complaint_count, found_patterns = detect_complaints(text)
+    
+    if is_complaint:
+        # The more complaint indicators, the more we adjust downward
+        # Each indicator reduces score by 0.3, capped at 0.8 total reduction
+        adjustment = min(complaint_count * 0.3, 0.8)
+        adjusted_score = vader_score - adjustment
+        # Don't go below -1.0 (VADER's minimum)
+        adjusted_score = max(adjusted_score, -1.0)
+        return adjusted_score, adjustment, found_patterns
+    
+    return vader_score, 0.0, []
+
 def log_average_column_lengths(df):
     """Log the median character length of each column (ignoring blank cells) to the debug window."""
     debug("[Column Lengths] Median character length per column (ignoring blanks):")
@@ -10,18 +78,8 @@ def log_average_column_lengths(df):
         else:
             median_len = non_blank.map(len).median()
         debug(f"{col} - {median_len:.2f}")
-import pandas as pd
-import os
-from pathlib import Path
-import sys
-import traceback
-from tqdm import tqdm
-from GetOpenEnds import get_open_ends
-from error_logging import log_error
-from constants import ERROR_LOG_FILENAME, INCLUDE_WITH_OPENS_FILENAME, LOG_SUFFIX, OVERALL_SUFFIX, LANGUAGE_SUFFIX_TEMPLATE, IGNORE_SET, STATUS_MESSAGES
-from debug_logging import debug
 
-def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None, check_duplicate_postcode_yob=False, check_length=True, length_multiplier=10):
+def run_data_extract(input_file, include_file, output_dir, check_open_ends=True, check_ai_bot_search=False, word_file=None, error_log_path=None, status_callback=None, check_duplicate_postcode_yob=False, check_length=True, length_multiplier=10, check_sentiment=False, sentiment_pos_threshold=0.6, sentiment_neg_threshold=0):
     print("[DEBUG] Starting run_data_extract")
     import time
     from datetime import datetime
@@ -185,6 +243,8 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             status_callback(STATUS_MESSAGES['word_search'])
         word_search_serials = None
         highlighted_cells = set()
+        flagged_serials = set()  # Initialize outside word search block
+        matches = []  # Initialize outside word search block
         if check_ai_bot_search:
             import re
             from openpyxl import load_workbook
@@ -208,8 +268,6 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                     debug(f"[Word Search] First 5 outro values: {outro_vals}")
                 else:
                     debug("[Word Search] No 'outro' column found in overall file.")
-                matches = []
-                flagged_serials = set()
                 search_words_lower = [w.lower() for w in search_words]
                 for idx, row in df_overall.iterrows():
                     interview_lang = str(row.get('InterviewLanguage', '')).strip().upper()
@@ -236,11 +294,25 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                         debug(f"  Respondent: {respondent_serial}, Column: {col}, Value: {cell}")
                 else:
                     debug("[Word Search] No matches found.")
-                # --- Create highlighted Excel file with CHECKS column if matches found ---
-                if highlighted_cells:
+            except Exception as e:
+                log_error(f"[Word Search] Error during word search: {e}", error_log_path)
+        
+        # --- Debug: Print toggle values before creating highlighted file ---
+        debug(f"[Highlight File] Toggle states:")
+        debug(f"  - highlighted_cells (word search): {bool(highlighted_cells)} (count: {len(highlighted_cells) if highlighted_cells else 0})")
+        debug(f"  - check_sentiment: {check_sentiment}")
+        debug(f"  - check_duplicate_postcode_yob: {check_duplicate_postcode_yob}")
+        debug(f"  - check_length: {check_length}")
+        should_create_file = highlighted_cells or check_sentiment or check_duplicate_postcode_yob or check_length
+        debug(f"[Highlight File] Should create highlighted file: {should_create_file}")
+        # --- Create highlighted Excel file with CHECKS column if any relevant toggle is selected ---
+        if should_create_file:
+                    debug(f"[Highlight File] Creating highlighted file...")
                     highlighted_file = os.path.join(output_dir, f'{base_name}__Overall_highlighted.xlsx')
+                    debug(f"[Highlight File] Highlighted file path: {highlighted_file}")
                     # Load the original overall file as DataFrame
                     df_highlight = pd.read_excel(overall_file, dtype=str)
+                    debug(f"[Highlight File] Loaded dataframe with {len(df_highlight)} rows and {len(df_highlight.columns)} columns")
                     # Find index of respondent.serial column
                     serial_col = None
                     for i, col in enumerate(df_highlight.columns):
@@ -255,15 +327,39 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                         insert_at = df_highlight.columns.get_loc(serial_col) + 1
                     checks_col = ["WORDS" if idx in rows_with_match else "" for idx in df_highlight.index]
                     df_highlight.insert(insert_at, "CHECKS", checks_col)
-                    # Sort so rows with 'WORDS' in CHECKS are at the top
-                    # Do not sort by CHECKS; keep original order for correct highlighting
+
+                    # === STEP 1: Add all additional columns BEFORE highlighting ===
+                    
+                    # Insert sentiment score column after 'outro' if sentiment analysis is enabled
+                    sentiment_added = False
+                    if check_sentiment and VADER_AVAILABLE and 'outro' in df_highlight.columns:
+                        debug(f"[Sentiment Analysis] Adding sentiment scores column after 'outro'")
+                        outro_idx = df_highlight.columns.get_loc('outro') + 1
+                        sentiment_scores = []
+                        analyzer = SentimentIntensityAnalyzer()
+                        for val in df_highlight['outro']:
+                            if pd.isna(val) or str(val).strip() == "":
+                                sentiment_scores.append("")
+                            else:
+                                vader_score = analyzer.polarity_scores(str(val))['compound']
+                                enhanced_score, adjustment, patterns = enhanced_sentiment_score(str(val), vader_score)
+                                sentiment_scores.append(enhanced_score)
+                        df_highlight.insert(outro_idx, 'outro_sentiment_score', sentiment_scores)
+                        sentiment_added = True
+                        debug(f"[Sentiment Analysis] Sentiment score column added at position {outro_idx}")
+
+                    # === STEP 2: Save the dataframe with all columns finalized ===
                     df_highlight.to_excel(highlighted_file, index=False, engine='openpyxl')
-                    # Now highlight the cells
+                    
+                    # Apply highlighting to cells
+                    from openpyxl import load_workbook
+                    from openpyxl.styles import PatternFill
                     wb = load_workbook(highlighted_file)
                     ws = wb.active
                     red_fill = PatternFill(start_color='FFFF0000', end_color='FFFF0000', fill_type='solid')
                     orange_fill = PatternFill(start_color='FFFFA500', end_color='FFFFA500', fill_type='solid')
                     yellow_fill = PatternFill(start_color='FFFFFF00', end_color='FFFFFF00', fill_type='solid')
+                    
                     # Calculate median lengths for each column (ignoring blanks)
                     median_lengths = {}
                     for col in df_highlight.columns:
@@ -273,8 +369,46 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                             median_lengths[col] = 0
                         else:
                             median_lengths[col] = non_blank.map(len).median()
-                    for row_idx, col_idx in highlighted_cells:
-                        ws.cell(row=row_idx, column=col_idx + 1).fill = red_fill  # +1 to account for CHECKS column
+                    
+                    # === STEP 3: Apply highlighting with correct column indices ===
+                    
+                    # Highlight word search matches - recalculate column positions after all columns are added
+                    if highlighted_cells:
+                        debug(f"[Word Search Highlighting] Applying word search highlights to {len(highlighted_cells)} cells")
+                        
+                        # Create column mapping ONCE (not per cell!)
+                        column_mapping = {}
+                        if check_ai_bot_search:
+                            try:
+                                # Get original dataframe columns ONCE
+                                df_original = pd.read_excel(overall_file, dtype=str)
+                                for original_idx, col_name in enumerate(df_original.columns):
+                                    if col_name in df_highlight.columns:
+                                        final_idx = df_highlight.columns.get_loc(col_name) + 1  # +1 for Excel 1-based
+                                        column_mapping[original_idx + 1] = final_idx  # +1 because highlighted_cells uses 1-based
+                                debug(f"[Word Search] Created column mapping for {len(column_mapping)} columns")
+                            except Exception as e:
+                                debug(f"[Word Search] Error creating column mapping: {e}")
+                                column_mapping = {}
+                        
+                        # Apply highlighting using the pre-built mapping
+                        for row_idx, original_col_idx in highlighted_cells:
+                            try:
+                                if original_col_idx in column_mapping:
+                                    final_col_idx = column_mapping[original_col_idx]
+                                    ws.cell(row=row_idx, column=final_col_idx).fill = red_fill
+                                    # Only debug first few to avoid spam
+                                    if len([x for x in highlighted_cells]) <= 10:
+                                        debug(f"[Word Search] Highlighted cell at row {row_idx}, column {final_col_idx}")
+                                else:
+                                    # Fallback to old method
+                                    adjustment = 1  # CHECKS column
+                                    if sentiment_added:
+                                        adjustment += 1  # sentiment score column if added before this column
+                                    ws.cell(row=row_idx, column=original_col_idx + adjustment).fill = red_fill
+                            except Exception as e:
+                                debug(f"[Word Search] Error highlighting cell at row {row_idx}: {e}")
+                    
                     # Highlight cells > multiplier x median in orange (skip header row)
                     if check_length:
                         for i, row in enumerate(df_highlight.itertuples(index=False), start=2):
@@ -296,7 +430,8 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                                             ws.cell(row=i, column=checks_col_idx).value = f"{existing},LENGTH"
                                     else:
                                         ws.cell(row=i, column=checks_col_idx).value = "LENGTH"
-                    # --- Highlight duplicate (postcode, yob) pairs and flag CHECKS ---
+                    
+                    # Highlight duplicate (postcode, yob) pairs and flag CHECKS
                     duplicate_log_lines = []
                     if check_duplicate_postcode_yob:
                         try:
@@ -343,47 +478,81 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
                                         duplicate_log_lines.append(f"Serial: {serial_val} | Postcode: {postcode_val} | YOB: {yob_val}")
                         except Exception as e:
                             log_error(f"[Duplicate Check] Error: {e}", error_log_path)
+                    
+                    # Sentiment Analysis highlighting
+                    sentiment_log_lines = []
+                    if check_sentiment and VADER_AVAILABLE:
+                        debug(f"[Sentiment Analysis] Starting sentiment analysis highlighting...")
+                        try:
+                            analyzer = SentimentIntensityAnalyzer()
+                            # Define fills for sentiment highlighting
+                            green_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")  # Light green
+                            red_fill_sentiment = PatternFill(start_color="FF6347", end_color="FF6347", fill_type="solid")  # Tomato red
+                            white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")  # White
+                            
+                            # Only analyze 'outro' column
+                            if 'outro' in df_highlight.columns:
+                                debug(f"[Sentiment Analysis] Found 'outro' column, analyzing {len(df_highlight)} rows...")
+                                sentiment_log_lines.append("Analyzing sentiment in 'outro' column")
+                                outro_col_idx = df_highlight.columns.get_loc('outro') + 1
+                                pos_count = 0
+                                neg_count = 0
+                                neutral_count = 0
+                                for i, row in enumerate(df_highlight.itertuples(index=False), start=2):
+                                    val = getattr(row, 'outro') if hasattr(row, 'outro') else ""
+                                    if pd.isna(val) or val == "" or str(val).strip() == "":
+                                        continue
+                                    vader_score = analyzer.polarity_scores(str(val))['compound']
+                                    enhanced_score, adjustment, complaint_patterns = enhanced_sentiment_score(str(val), vader_score)
+                                    # Highlight positive (>=pos_threshold) green, negative (<=neg_threshold) red, else white
+                                    if enhanced_score >= sentiment_pos_threshold:
+                                        ws.cell(row=i, column=outro_col_idx).fill = green_fill
+                                        pos_count += 1
+                                    elif enhanced_score <= sentiment_neg_threshold:
+                                        ws.cell(row=i, column=outro_col_idx).fill = red_fill_sentiment
+                                        neg_count += 1
+                                    else:
+                                        ws.cell(row=i, column=outro_col_idx).fill = white_fill
+                                        neutral_count += 1
+                                    text_preview = str(val)[:100] + "..." if len(str(val)) > 100 else str(val)
+                                    # Log with both original and enhanced scores if adjustment was made
+                                    if adjustment > 0:
+                                        sentiment_log_lines.append(f"Row {i}: VADER={vader_score:.3f} -> Enhanced={enhanced_score:.3f} (adj:-{adjustment:.3f}) - {text_preview}")
+                                        sentiment_log_lines.append(f"  Complaint patterns: {', '.join(complaint_patterns)}")
+                                    else:
+                                        sentiment_log_lines.append(f"Row {i}: score={enhanced_score:.3f} - {text_preview}")
+                                sentiment_log_lines.append(f"Total very positive: {pos_count}")
+                                sentiment_log_lines.append(f"Total very negative: {neg_count}")
+                                sentiment_log_lines.append(f"Total neutral: {neutral_count}")
+                            else:
+                                sentiment_log_lines.append("No 'outro' column found for sentiment analysis")
+                        except Exception as e:
+                            log_error(f"[Sentiment Analysis] Error: {e}", error_log_path)
+                            sentiment_log_lines.append(f"Sentiment analysis failed: {e}")
+                    elif check_sentiment and not VADER_AVAILABLE:
+                        debug(f"[Sentiment Analysis] VADER library not available!")
+                        sentiment_log_lines.append("Sentiment analysis requested but vaderSentiment library not available.")
+                    elif check_sentiment:
+                        debug(f"[Sentiment Analysis] Sentiment analysis requested but no 'outro' column found")
+                    
                     wb.save(highlighted_file)
-                    debug(f"[Word Search] Highlighted file with CHECKS column created: {highlighted_file}")
-                # Log average character length per column after word search
-                if status_callback:
-                    status_callback(STATUS_MESSAGES['length_checks'])
-                log_average_column_lengths(df_highlight)
-            except Exception as e:
-                log_error(f"[Word Search] Error during search: {e}", error_log_path)
-        # Per-language files
-        for lang in languages:
-            lang_df = df[df['InterviewLanguage'] == lang][selected_columns]
-            out_file = os.path.join(output_dir, f'{base_name}{LANGUAGE_SUFFIX_TEMPLATE.format(lang=lang)}')
-            lang_df.to_excel(out_file, index=False)
-            output_files.append(out_file)
-            char_counts[out_file] = lang_df.astype(str).apply(lambda col: col.map(len)).sum().sum()
-            outro_char_counts[out_file] = lang_df['outro'].astype(str).apply(len).sum() if 'outro' in lang_df.columns else 0
-        end_time = datetime.now()
-        end_ts = time.time()
-        runtime = end_ts - start_ts
-        # Open ends not in original include file
-        new_open_ends = [col for col in open_end_cols if col not in original_include_columns]
-        # Compose log
+                    debug(f"[Highlight] Highlighted file saved successfully: {highlighted_file}")
+        else:
+            debug(f"[Highlight File] No relevant toggles selected - skipping highlighted file creation")
+
+        # Create log file with processing results
         log_lines = []
-        log_lines.append(f"Start time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        log_lines.append(f"End time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        log_lines.append(f"Total running time in seconds: {runtime:.2f}")
+        log_lines.append("Processing Results Summary")
+        log_lines.append("=" * 40)
         log_lines.append("")
-        log_lines.append(f"Number of output files created: {len(output_files)}")
-        log_lines.append(f"Languages in the data file: {', '.join(str(l) for l in languages)}")
+        log_lines.append(f"Input file: {os.path.basename(input_file)}")
+        log_lines.append(f"Output directory: {output_dir}")
         log_lines.append("")
-        log_lines.append("Output files:")
+        log_lines.append("Files created:")
         for f in output_files:
-            log_lines.append(f"  {f}")
+            log_lines.append(f"  {os.path.basename(f)}")
         log_lines.append("")
-        log_lines.append(f"Number of open ends detected that weren't originally in the include file: {len(new_open_ends)}")
-        if new_open_ends:
-            log_lines.append("Names of new open end columns:")
-            for col in new_open_ends:
-                log_lines.append(f"  {col}")
-        log_lines.append("")
-        log_lines.append("Character counts per file:")
+        log_lines.append("Total number of characters in each file:")
         for f in output_files:
             log_lines.append(f"  {os.path.basename(f)}: {char_counts[f]}")
         log_lines.append("")
@@ -416,6 +585,16 @@ def run_data_extract(input_file, include_file, output_dir, check_open_ends=True,
             log_lines.append("Duplicate Postcode/YOB Pairs Found:")
             for line in duplicate_log_lines:
                 log_lines.append(line)
+        
+        # --- Append sentiment analysis log if any ---
+        if check_sentiment and 'sentiment_log_lines' in locals() and sentiment_log_lines:
+            log_lines.append("")
+            log_lines.append("Sentiment Analysis Results:")
+            log_lines.append(f"Positive threshold: {sentiment_pos_threshold}")
+            log_lines.append(f"Negative threshold: {sentiment_neg_threshold}")
+            for line in sentiment_log_lines:
+                log_lines.append(line)
+        
         # --- Append column median lengths at the bottom ---
         log_lines.append("")
         log_lines.append("Column Median Lengths:")
